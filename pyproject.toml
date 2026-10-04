@@ -4,7 +4,16 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "accelerate>=1.15.0",
+    "diffusers>=0.40.0",
+    "huggingface-hub>=1.33.0",
+    "pillow>=12.3.0",
+    "safetensors>=0.8.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "transformers>=5.18.0",
+]
 
 [project.scripts]
 ai-animtions = "ai_animtions:main"
@@ -12,3 +21,11 @@ ai-animtions = "ai_animtions:main"
 [build-system]
 requires = ["uv_build>=0.12.15,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
