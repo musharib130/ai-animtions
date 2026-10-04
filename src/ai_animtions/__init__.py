@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=832, help="Image width (default: 832)")
     parser.add_argument("--height", type=int, default=1216, help="Image height (default: 1216)")
     parser.add_argument("--out", type=Path, default=Path("outputs/characters"), help="Output folder")
+    parser.add_argument("--keep-bg", action="store_true", help="Skip background removal")
     args = parser.parse_args()
 
     generate_character(
@@ -31,5 +32,6 @@ def main() -> None:
             width=args.width,
             height=args.height,
             out_dir=args.out,
+            remove_bg=not args.keep_bg,
         )
     )

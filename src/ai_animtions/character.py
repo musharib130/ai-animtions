@@ -39,6 +39,16 @@ class CharacterRequest:
     width: int = 832
     height: int = 1216
     out_dir: Path = Path("outputs/characters")
+    remove_bg: bool = True
+
+
+# Background removal models (rembg, runs on CPU). isnet-anime is trained on
+# drawn characters; 3D renders need the general-purpose model.
+BG_MODELS = {
+    "cartoon": "isnet-anime",
+    "anime": "isnet-anime",
+    "3d": "isnet-general-use",
+}
 
 
 def build_prompt(prompt: str, style: str) -> str:
@@ -63,6 +73,20 @@ def load_pipeline():
     return pipe
 
 
+def remove_background(image_path: Path, style: str = "cartoon", session=None) -> Path:
+    """Save a transparent-background copy of image_path as <name>_nobg.png."""
+    from PIL import Image
+    from rembg import new_session, remove
+
+    if session is None:
+        session = new_session(BG_MODELS[style])
+
+    cutout = remove(Image.open(image_path), session=session, post_process_mask=True)
+    out_path = image_path.with_name(f"{image_path.stem}_nobg.png")
+    cutout.save(out_path)
+    return out_path
+
+
 def generate_character(request: CharacterRequest, pipe=None) -> list[Path]:
     import torch
 
@@ -72,6 +96,13 @@ def generate_character(request: CharacterRequest, pipe=None) -> list[Path]:
     full_prompt = build_prompt(request.prompt, request.style)
     base_seed = request.seed if request.seed is not None else random.randint(0, 2**32 - 1)
     slug = re.sub(r"[^a-z0-9]+", "-", request.prompt.lower()).strip("-")[:40] or "character"
+
+    bg_session = None
+    if request.remove_bg:
+        from rembg import new_session
+
+        print(f"Loading background removal model {BG_MODELS[request.style]}...", flush=True)
+        bg_session = new_session(BG_MODELS[request.style])
 
     request.out_dir.mkdir(parents=True, exist_ok=True)
     saved = []
@@ -102,5 +133,10 @@ def generate_character(request: CharacterRequest, pipe=None) -> list[Path]:
         path.with_suffix(".json").write_text(json.dumps(meta, indent=2))
         saved.append(path)
         print(f"Saved {path}")
+
+        if bg_session is not None:
+            cutout_path = remove_background(path, session=bg_session)
+            saved.append(cutout_path)
+            print(f"Saved {cutout_path}")
 
     return saved
