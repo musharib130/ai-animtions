@@ -24,7 +24,7 @@ TEMPLATE = (
 NEGATIVE_PROMPT = (
     "blurry, lowres, cropped, out of frame, cut off feet, extra limbs, extra fingers, "
     "deformed hands, multiple characters, text, watermark, signature, busy background, "
-    "photo, photorealistic"
+    "photo, photorealistic, gun, weapon, pistol, holding object, cigarette, smoking, jetpack"
 )
 
 
@@ -51,6 +51,22 @@ BG_MODELS = {
 }
 
 
+# Each output folder groups files by type; a file keeps the same name in each.
+WITH_BG_DIR, NO_BG_DIR, JSON_DIR = "with_bg", "no_bg", "json"
+
+
+def output_paths(out_dir: Path, name: str) -> tuple[Path, Path, Path]:
+    """Return (with_bg .png, no_bg .png, .json) paths for name, creating the folders."""
+    paths = (
+        out_dir / WITH_BG_DIR / f"{name}.png",
+        out_dir / NO_BG_DIR / f"{name}.png",
+        out_dir / JSON_DIR / f"{name}.json",
+    )
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
 def build_prompt(prompt: str, style: str) -> str:
     return TEMPLATE.format(style=STYLES[style], prompt=prompt)
 
@@ -73,8 +89,8 @@ def load_pipeline():
     return pipe
 
 
-def remove_background(image_path: Path, style: str = "cartoon", session=None) -> Path:
-    """Save a transparent-background copy of image_path as <name>_nobg.png."""
+def remove_background(image_path: Path, out_path: Path, style: str = "cartoon", session=None) -> Path:
+    """Save a transparent-background copy of image_path to out_path."""
     from PIL import Image
     from rembg import new_session, remove
 
@@ -82,7 +98,6 @@ def remove_background(image_path: Path, style: str = "cartoon", session=None) ->
         session = new_session(BG_MODELS[style])
 
     cutout = remove(Image.open(image_path), session=session, post_process_mask=True)
-    out_path = image_path.with_name(f"{image_path.stem}_nobg.png")
     cutout.save(out_path)
     return out_path
 
@@ -104,7 +119,6 @@ def generate_character(request: CharacterRequest, pipe=None) -> list[Path]:
         print(f"Loading background removal model {BG_MODELS[request.style]}...", flush=True)
         bg_session = new_session(BG_MODELS[request.style])
 
-    request.out_dir.mkdir(parents=True, exist_ok=True)
     saved = []
     for i in range(request.count):
         seed = base_seed + i
@@ -118,7 +132,7 @@ def generate_character(request: CharacterRequest, pipe=None) -> list[Path]:
             generator=torch.Generator("cpu").manual_seed(seed),
         ).images[0]
 
-        path = request.out_dir / f"{slug}_{request.style}_{seed}.png"
+        path, nobg_path, json_path = output_paths(request.out_dir, f"{slug}_{request.style}_{seed}")
         image.save(path)
 
         # Sidecar with everything needed to regenerate the same character later.
@@ -130,13 +144,13 @@ def generate_character(request: CharacterRequest, pipe=None) -> list[Path]:
             "out_dir": str(request.out_dir),
         }
         meta.pop("count")
-        path.with_suffix(".json").write_text(json.dumps(meta, indent=2))
+        json_path.write_text(json.dumps(meta, indent=2))
         saved.append(path)
         print(f"Saved {path}")
 
         if bg_session is not None:
-            cutout_path = remove_background(path, session=bg_session)
-            saved.append(cutout_path)
-            print(f"Saved {cutout_path}")
+            remove_background(path, nobg_path, session=bg_session)
+            saved.append(nobg_path)
+            print(f"Saved {nobg_path}")
 
     return saved
